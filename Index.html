@@ -1,0 +1,103 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Human Capabilities - Reaction Test</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2rem; }
+    #stimulus { width: 50px; height: 50px; margin: 2rem auto; background: black; }
+  </style>
+</head>
+<body>
+  <h1 id="title">User Study</h1>
+  <h2 id="instruction">Press space to start A1 (Simple RT), 'd' for A2, 'c' for A3</h2>
+  <div id="stimulus"></div>
+  <p id="time"></p>
+  <p id="count"></p>
+  <p id="mean"></p>
+  <p id="sd"></p>
+
+  <script>
+    // State
+    let experimentActive = false;
+    let stimulusVisible = false;
+    let stimulusTimestamp;
+    let stimulusTimeout;
+    let times = [];
+    let currentTask = 'A1';
+    const SCRIPT_URL = 'https://script.google.com/.../exec';
+
+    // DOM
+    const timeEl = document.getElementById('time');
+    const countEl = document.getElementById('count');
+    const meanEl = document.getElementById('mean');
+    const sdEl = document.getElementById('sd');
+    const instEl = document.getElementById('instruction');
+    const stimEl = document.getElementById('stimulus');
+
+    // Stats
+    function mean(arr){ return arr.reduce((a,b)=>a+b)/arr.length; }
+    function sd(arr){ const m=mean(arr); return Math.sqrt(arr.reduce((s,x)=>s+(x-m)**2,0)/arr.length); }
+
+    function clearResults(){ timeEl.textContent=''; countEl.textContent=''; meanEl.textContent=''; sdEl.textContent=''; }
+    function showResults(){
+      countEl.textContent = 'Count: ' + times.length;
+      meanEl.textContent  = 'Mean: ' + Math.round(mean(times)) + ' ms';
+      sdEl.textContent    = 'SD: ' + Math.round(sd(times)) + ' ms';
+    }
+
+    function sendData(rt, error=false){
+      fetch(SCRIPT_URL,{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ subjectId:'S01', runType: currentTask, trial: times.length+1, rt, error })
+      });
+    }
+
+    function scheduleStimulus(){
+      stimulusVisible = false;
+      stimEl.style.background='black';
+      const wait = Math.random()*4000 + 2000;
+      stimulusTimeout = setTimeout(() => {
+        if(currentTask==='A1') stimEl.style.background='red';
+        if(currentTask==='A2') stimEl.textContent = Math.random()<0.5 ? '■' : '▲';
+        if(currentTask==='A3') stimEl.textContent = ['🍔','🥢','🌮'][Math.floor(Math.random()*3)];
+        stimulusVisible = true;
+        stimulusTimestamp = Date.now();
+      }, wait);
+    }
+
+    function startExperiment(task){
+      currentTask = task;
+      clearTimeout(stimulusTimeout);
+      times=[]; clearResults();
+      experimentActive = true;
+      instEl.textContent = `Task ${task}: press space when stimulus shows`; 
+      scheduleStimulus();
+    }
+
+    function stopExperiment(){
+      clearTimeout(stimulusTimeout);
+      experimentActive = false;
+      instEl.textContent = "Press space to start A1, 'd' for A2, 'c' for A3";
+      showResults();
+    }
+
+    window.addEventListener('keydown', e=>{
+      if(e.key===' '){
+        if(!experimentActive) return startExperiment('A1');
+        if(stimulusVisible){
+          const rt = Date.now()-stimulusTimestamp;
+          times.push(rt);
+          timeEl.textContent = rt + ' ms';
+          sendData(rt);
+          scheduleStimulus();
+        }
+      }
+      else if(e.key==='d'){ if(!experimentActive) startExperiment('A2'); }
+      else if(e.key==='c'){ if(!experimentActive) startExperiment('A3'); }
+      else if(e.key==='a'){ if(experimentActive) stopExperiment(); }
+      else if(e.key==='b'){ window.location.href='analysis.html'; }
+    });
+  </script>
+</body>
+</html>

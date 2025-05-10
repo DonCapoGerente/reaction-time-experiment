@@ -1,0 +1,31 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reaction Time Analysis</title>
+  <style> body { font-family: sans-serif; text-align: center; padding: 2rem; } #table { margin: auto; } </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Analysis</h1>
+  <h2>Summary by Task</h2>
+  <canvas id="chart" width="400" height="200"></canvas>
+  <script>
+    async function loadData(){
+      const csv = await fetch('https://docs.google.com/spreadsheets/d/<ID>/export?format=csv').then(r=>r.text());
+      const rows = csv.split('\n').slice(1).map(r=>r.split(','));
+      const byTask = {};
+      rows.forEach(([ts,id,task,trial,rt,err])=>{
+        if(!byTask[task]) byTask[task]=[];
+        byTask[task].push(+rt);
+      });
+      const labels=Object.keys(byTask);
+      const data=labels.map(t=> byTask[t].reduce((a,b)=>a+b,0)/byTask[t].length );
+      new Chart(document.getElementById('chart'),{
+        type:'bar', data:{ labels, datasets:[{ label:'Mean RT', data }] }
+      });
+    }
+    loadData();
+  </script>
+</body>
+</html>
