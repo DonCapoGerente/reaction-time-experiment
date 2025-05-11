@@ -18,86 +18,132 @@
   <p id="sd"></p>
 
   <script>
-    // State
-    let experimentActive = false;
-    let stimulusVisible = false;
-    let stimulusTimestamp;
-    let stimulusTimeout;
-    let times = [];
-    let currentTask = 'A1';
-    const SCRIPT_URL = 'https://script.google.com/.../exec';
+  // --- State & DOM references ---
+  let experimentActive = false;
+  let stimulusVisible = false;
+  let stimulusTimestamp;
+  let stimulusTimeout;
+  let times = [];
+  let currentTask = 'A1';
+  let expectedKey = '';
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyH1HS7MsUxnPxXBBPWeBc2jnpSiXxqSj0-d-7njRSIZ29kX_YQB7roDgFFH_ve9Ngy/exec'; 
 
-    // DOM
-    const timeEl = document.getElementById('time');
-    const countEl = document.getElementById('count');
-    const meanEl = document.getElementById('mean');
-    const sdEl = document.getElementById('sd');
-    const instEl = document.getElementById('instruction');
-    const stimEl = document.getElementById('stimulus');
+  const timeEl = document.getElementById('time');
+  const countEl = document.getElementById('count');
+  const meanEl = document.getElementById('mean');
+  const sdEl = document.getElementById('sd');
+  const instEl = document.getElementById('instruction');
+  const stimEl = document.getElementById('stimulus');
 
-    // Stats
-    function mean(arr){ return arr.reduce((a,b)=>a+b)/arr.length; }
-    function sd(arr){ const m=mean(arr); return Math.sqrt(arr.reduce((s,x)=>s+(x-m)**2,0)/arr.length); }
-
-    function clearResults(){ timeEl.textContent=''; countEl.textContent=''; meanEl.textContent=''; sdEl.textContent=''; }
-    function showResults(){
-      countEl.textContent = 'Count: ' + times.length;
-      meanEl.textContent  = 'Mean: ' + Math.round(mean(times)) + ' ms';
-      sdEl.textContent    = 'SD: ' + Math.round(sd(times)) + ' ms';
+  // --- Utility functions ---
+  function mean(arr) { return arr.reduce((a, b) => a + b) / arr.length; }
+  function sd(arr) {
+    const m = mean(arr);
+    return Math.sqrt(arr.reduce((sum, x) => sum + (x - m) ** 2, 0) / arr.length);
+  }
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-
-    function sendData(rt, error=false){
-      fetch(SCRIPT_URL,{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ subjectId:'S01', runType: currentTask, trial: times.length+1, rt, error })
-      });
-    }
-
-    function scheduleStimulus(){
-      stimulusVisible = false;
-      stimEl.style.background='black';
-      const wait = Math.random()*4000 + 2000;
-      stimulusTimeout = setTimeout(() => {
-        if(currentTask==='A1') stimEl.style.background='red';
-        if(currentTask==='A2') stimEl.textContent = Math.random()<0.5 ? '■' : '▲';
-        if(currentTask==='A3') stimEl.textContent = ['🍔','🥢','🌮'][Math.floor(Math.random()*3)];
-        stimulusVisible = true;
-        stimulusTimestamp = Date.now();
-      }, wait);
-    }
-
-    function startExperiment(task){
-      currentTask = task;
-      clearTimeout(stimulusTimeout);
-      times=[]; clearResults();
-      experimentActive = true;
-      instEl.textContent = `Task ${task}: press space when stimulus shows`; 
-      scheduleStimulus();
-    }
-
-    function stopExperiment(){
-      clearTimeout(stimulusTimeout);
-      experimentActive = false;
-      instEl.textContent = "Press space to start A1, 'd' for A2, 'c' for A3";
-      showResults();
-    }
-
-    window.addEventListener('keydown', e=>{
-      if(e.key===' '){
-        if(!experimentActive) return startExperiment('A1');
-        if(stimulusVisible){
-          const rt = Date.now()-stimulusTimestamp;
-          times.push(rt);
-          timeEl.textContent = rt + ' ms';
-          sendData(rt);
-          scheduleStimulus();
-        }
-      }
-      else if(e.key==='d'){ if(!experimentActive) startExperiment('A2'); }
-      else if(e.key==='c'){ if(!experimentActive) startExperiment('A3'); }
-      else if(e.key==='a'){ if(experimentActive) stopExperiment(); }
-      else if(e.key==='b'){ window.location.href='analysis.html'; }
+    return arr;
+  }
+  function sendData(rt, error=false) {
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ subjectId: 'S01', runType: currentTask, trial: times.length + 1, rt, error })
     });
+  }
+
+  // --- A3 image pool (10 each, numbered) ---
+  const countries = ['de', 'ch', 'mex'];
+  const imgPool = countries.flatMap(country =>
+    Array.from({ length: 10 }, (_, i) => `images/{${country}}_${String(i+1).padStart(2,'0')}.jpg`)
+  );
+  let a3Images = shuffle([...imgPool]);
+  function nextA3Image() {
+    if (a3Images.length === 0) a3Images = shuffle([...imgPool]);
+    return a3Images.pop();
+  }
+
+  // --- Stimulus scheduling ---
+  function scheduleStimulus() {
+    stimulusVisible = false;
+    stimEl.style.background = 'black';
+    stimEl.textContent = '';
+    const wait = Math.random() * 4000 + 2000; // 2–6s
+    stimulusTimeout = setTimeout(() => {
+      if (currentTask === 'A1') {
+        stimEl.style.background = 'red';
+      } else if (currentTask === 'A2') {
+        const shape = Math.random() < 0.5 ? '■' : '▲';
+        stimEl.textContent = shape;
+      } else if (currentTask === 'A3') {
+        const imgPath = nextA3Image();
+        const country = imgPath.match(/\{([^}]+)\}/)[1];
+        stimEl.innerHTML = `<img src="${imgPath}" width="140">`;
+        expectedKey = { de: 'd', ch: 'f', mex: 'g' }[country];
+      }
+      stimulusVisible = true;
+      stimulusTimestamp = Date.now();
+    }, wait);
+  }
+
+  function startExperiment(task) {
+    currentTask = task;
+    clearTimeout(stimulusTimeout);
+    times = [];
+    clearResults();
+    experimentActive = true;
+    instEl.textContent = `Task ${task}: press space when stimulus shows`;
+    scheduleStimulus();
+  }
+  function stopExperiment() {
+    clearTimeout(stimulusTimeout);
+    experimentActive = false;
+    instEl.textContent = "Press space to start A1, 'd' for A2, 'c' for A3";
+    showResults();
+  }
+
+  function clearResults() {
+    timeEl.textContent = '';
+    countEl.textContent = '';
+    meanEl.textContent = '';
+    sdEl.textContent = '';
+  }
+  function showResults() {
+    countEl.textContent = 'Count: ' + times.length;
+    meanEl.textContent = 'Mean: ' + Math.round(mean(times)) + ' ms';
+    sdEl.textContent = 'SD: ' + Math.round(sd(times)) + ' ms';
+  }
+
+  // --- Key handler ---
+  window.addEventListener('keydown', e => {
+    if (e.key === ' ') {
+      if (!experimentActive) return startExperiment('A1');
+      if (stimulusVisible) {
+        const rt = Date.now() - stimulusTimestamp;
+        let error = false;
+        if (currentTask === 'A3') {
+          error = e.key.toLowerCase() !== expectedKey;
+        }
+        times.push(rt);
+        timeEl.textContent = rt + ' ms';
+        sendData(rt, error);
+        scheduleStimulus();
+      }
+    } else if (e.key === 'd') {
+      if (!experimentActive) startExperiment('A2');
+    } else if (e.key === 'c') {
+      if (!experimentActive) startExperiment('A3');
+    } else if (e.key === 'a') {
+      if (experimentActive) stopExperiment();
+    } else if (e.key === 'b') {
+      window.location.href = 'analysis.html';
+    }
+  });
   </script>
 </body>
 </html>
+
